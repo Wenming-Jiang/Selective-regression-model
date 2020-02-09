@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import h5py
+import argparse
 
 def rotate_by_channel(data, sita, length=2):
     newdata = []
@@ -111,37 +112,44 @@ def rotated_evaltion(test_data, test_Y, model, BATCH_SIZE):
     return mae
 
 
-def fenkaishuju():
+def Separate(train_data_path_ATLN, train_x_save_path, train_y_save_path, test_x_save_path, test_y_save_path):
     #train_data_path_CPAC = "../data/TCIR-CPAC_IO_SH.h5"       # CPAC,IO,SH     14.6GB data
-    train_data_path_ATLN = "../data/TCIR-ATLN_EPAC_WPAC.h5"   # ATLN,EPAC,WPAC 30GB   data
+    #train_data_path_ATLN = "../data/TCIR-ATLN_EPAC_WPAC.h5"   # ATLN,EPAC,WPAC 30GB   data
     #x_train, y_train = pre_processing(train_data_path_CPAC)
     x_train, y_train = pre_processing2(2000000000, 2015000000, train_data_path_ATLN)
     print(x_train.shape)
     print(y_train.shape)
-    np.save("../rotated_data/ATLN_2003_2014_data_x_201.npy", x_train)
-    np.save("../rotated_data/ATLN_2003_2014_data_y_201.npy", y_train)
-
-
+    np.save(train_x_save_path, x_train)
+    np.save(train_y_save_path, y_train)
+    #np.save("../rotated_data/ATLN_2003_2014_data_x_201.npy", x_train)
+    #np.save("../rotated_data/ATLN_2003_2014_data_y_201.npy", y_train)
     x_test, y_test = pre_processing2(2015000000, 2017000000, train_data_path_ATLN)
     print(x_test.shape)
     print(y_test.shape)
-    np.save("../rotated_data/ATLN_2015_2016_data_x_201.npy", x_test)
-    np.save("../rotated_data/ATLN_2015_2016_data_y_201.npy", y_test)
-
+    np.save(test_x_save_path, x_test)
+    np.save(test_y_save_path, y_test)
+    #np.save("../rotated_data/ATLN_2015_2016_data_x_201.npy", x_test)
+    #np.save("../rotated_data/ATLN_2015_2016_data_y_201.npy", y_test)
     print("OK!!!")
+
 #x_test = np.load("../data/ATLN_2015_2016_data_x.npy")
 #new_x_test = normalize_data(x_test, 4)
 #np.save("../norm_data_65/ATLN_2015_2016_data_x.npy", new_x_test)
 
-#x_train = np.load("../data/ATLN_2003_2014_data_x.npy")
-#new_x_train = normalize_data(x_train, 4)
-#np.save("../norm_data_65/ATLN_2003_2014_data_x.npy", new_x_train)
-
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.parse_args()
 
+    parser.add_argument("-P", "--datapath", default="../data/TCIR-ATLN_EPAC_WPAC.h5", help="the TCIR dataset file path")
+    parser.add_argument("-Tx", "--trainset_xpath", default="../data/ATLN_2003_2014_data_x_101.npy", help="the trainning set x file path")
+    parser.add_argument("-Ty", "--trainset_ypath", default="../data/ATLN_2003_2014_data_y_101.npy", help="the trainning set y file path")
+
+    parser.add_argument("-Tex", "--testset_xpath", default="../data/ATLN_2015_2016_data_x_101.npy", help="the test set x file path")
+    parser.add_argument("-Tey", "--testset_ypath", default="../data/ATLN_2015_2016_data_y_101.npy", help="the test set y file path")
+    args = parser.parse_args()
+    
+    Separate(args.datapath, args.train_x_save_path, args.train_y_save_path, args.test_x_save_path, args.test_y_save_path)
+    
     #x_train = np.load("../rotated_data/ATLN_2015_2016_data_x_201.npy").astype("float32")
     #y_train = np.load("../rotated_data/ATLN_2015_2016_data_y_201.npy").astype("float32")
     #save_rotated_data()
-
-
-
