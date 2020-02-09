@@ -271,23 +271,7 @@ def TC_diffT(row, col, num, fig):
 if __name__ == '__main__':
 	#draw_dy_sample()
 	TC_draw_dy_sample()
-
-	#row = 1
-	#col = 4
-	#fig = plt.figure(num=1, figsize=(24,6))
 	
-	#TC_diffT(row, col, 1, fig)
-	#AGE_diffT(row, col, 2, fig)
-	#TC_testmse_testb_idealmse(row, col, 3, fig)
-	#AGE_testmse_testb_idealmse(row, col, 4, fig)
-
-	#fig.tight_layout() #调整整体空白
-	#plt.savefig('./Figure/Together1.eps')
-	#plt.savefig('./Figure/Together1.png')
-	#plt.show()
-	
-
-	'''
 	row = 1
 	col = 1
 	fig = plt.figure(num=1, figsize=(5.5,5))
@@ -297,9 +281,6 @@ if __name__ == '__main__':
 	plt.savefig('./Figure/TC_BlendVar_Ttmp.png')
 	plt.show()
 	
-	'''
-
-	'''
 	row = 1
 	col = 1
 	fig = plt.figure(num=1, figsize=(5.5,5))
@@ -308,10 +289,7 @@ if __name__ == '__main__':
 	plt.savefig('./Figure/AGE_MCdropout_Ttmp.eps')
 	plt.savefig('./Figure/AGE_MCdropout_Ttmp.png')
 	plt.show()
-	'''
-
-
-	'''
+	
 	row = 1
 	col = 1
 	fig = plt.figure(num=1, figsize=(5.5,5))
@@ -320,9 +298,7 @@ if __name__ == '__main__':
 	plt.savefig('./Figure/AGE_testmse_testb_idealmsetmp.eps')
 	plt.savefig('./Figure/AGE_testmse_testb_idealmsetmp.png')
 	plt.show()
-	'''
-
-	'''
+	
 	row = 1
 	col = 1
 	fig = plt.figure(num=1, figsize=(5.5,5))
@@ -331,4 +307,4 @@ if __name__ == '__main__':
 	plt.savefig('./Figure/TC_testmse_testb_idealmsetmp.eps')
 	plt.savefig('./Figure/TC_testmse_testb_idealmsetmp.png')
 	plt.show()
-	'''
+	
