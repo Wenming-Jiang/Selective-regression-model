@@ -63,7 +63,7 @@ def pre_processing2(first_time, second_time, data_path):
     # Y:(None, 1)
     new_data_x = []
     new_data_y = []
-    #data_x = data_x[:, 68:133, 68:133, :]  # for the 64 * 64
+    data_x = data_x[:, 50:151, 50:151, [0,3]]  # for the 64 * 64
     data_x = np.nan_to_num(data_x)
     data_x[data_x>1000] = 0
     for i in range(len(data_time)):

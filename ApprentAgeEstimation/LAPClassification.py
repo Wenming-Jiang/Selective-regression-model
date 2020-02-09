@@ -1,8 +1,16 @@
 import numpy as np
 import sys, os
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.parse_args()
+parser.add_argument("-C", "--cafferoot", default="C:/Users/jwm/Desktop/caffe-windows/", help="the caffe root path")
+parser.add_argument("-R", "--repeat_times", default=50, help="the times of MC-dropout")
+args = parser.parse_args()
 
 #set current dir
-caffe_root = 'C:/Users/jwm/Desktop/caffe-windows/' 
+#caffe_root = 'C:/Users/jwm/Desktop/caffe-windows/' 
+caffe_root = args.caffe_root
 sys.path.insert(0, caffe_root + 'python')
 import caffe
 os.chdir(caffe_root)
@@ -86,7 +94,8 @@ fp.close()
 Total_AE = 0
 num = 0
 predict_age = []
-repeat_times = 50
+#repeat_times = 50
+repeat_times = args.repeat_times
 
 for imageinfo in imageinfos:
 	info = imageinfo.split(" ")
@@ -123,27 +132,3 @@ print(predict_age.shape)
 np.save("test50_predict_age.npy", predict_age)
 np.save("test50_predict_age_MAE" + str(MAE) + ".npy", predict_age)
 
-
-
-
-
-
-
-
-
-
-
-'''
-im=caffe.io.load_image(path_name+'image_2052.jpg') #test_img
-for i in range(5):
-	net.blobs['data'].data[...] = transformer.preprocess('data',im)
-	out = net.forward()
-
-	probablity = net.blobs['prob'].data[0].flatten()	
-	Ex = sum(age*probablity)
-	print("Ex : ", Ex)
-
-#imagenet_labels_filename = caffe_root + 'data/ilsvrc12/synset_words.txt' # label to categr
-#labels = np.loadtxt(imagenet_labels_filename, str, delimiter='\t')
-#top_k = net.blobs['prob'].data[0].flatten().argsort()[-1:-6:-1]
-'''

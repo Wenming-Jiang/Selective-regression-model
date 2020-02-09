@@ -8,7 +8,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential, Model, load_model
 from keras.layers import Dense, Dropout, Activation, Flatten, Input, Concatenate, Conv2D, MaxPooling2D, BatchNormalization
 from keras.regularizers import l2,l1,l1_l2
-from keras.initializers import TruncatedNormal, RandomNormal #, Ones, Constant, Zeros
+from keras.initializers import TruncatedNormal, RandomNormal
 from keras.utils import np_utils
 #from keras.layers.core import Lambda
 
@@ -18,13 +18,10 @@ import numpy as np
 #import h5py
 import math
 import matplotlib.pyplot as plt
+import argparse
 
 import sys
 sys.path.append("../tools/")
-
-#from rotate_batch import rotate_by_channel
-#from read_201_data import NASANet, AlexNet, ResNet
-#from read_201_data import AlexNet_OnlyModel
 
 #regressmodel = AlexNet(W_l1RE=0, W_l2RE=1e-4, shape=(65,65,2))
 #regressmodel.load_weights('../result_model/weightsV2-improvement-450.hdf5')
@@ -128,7 +125,7 @@ def normalize_data(x_test, chanel_num):
     result=[]
     height = x_test.shape[1]
     for each_sam in x_test:
-        new_sam = [];
+        new_sam = []
         for i in range(chanel_num):
             chanel = each_sam[:,:,i]
             chanel = (chanel - np.mean(chanel)) / (np.std(chanel)+0.01)
@@ -142,34 +139,39 @@ def normalize_data(x_test, chanel_num):
     result = np.array(result)
     return result
 
-def train_AlexNet(EPOCHS, model_num):
+def train_AlexNet(EPOCHS, trainset_xpath, trainset_ypath, testset_xpath, testset_ypath):
     W_l1RE = 1e-5 # 5e-4 is best
     W_l2RE = 1e-5
     batch_size = 64
     epochs = EPOCHS
     data_augmentation = True
-    save_dir = os.path.join(os.getcwd(), 'NASA_model')
+    save_dir = os.path.join(os.getcwd(), 'result_model')
     #model_name = 'AlexNetSmallRo' + str(SITA) + '.h5'
-    if model_num == 0: 
-        #W_l1RE = 5e-4
-        W_l1RE = 0
-        W_l2RE = 1e-4
-        #W_l2RE = 1e-5
-        x_train = np.load("../sita_rotated_data/ATLN_2003_2014_data_x_101_filted.npy").astype('float32')
-        y_train = np.load("../sita_rotated_data/ATLN_2003_2014_data_y_201.npy").astype('float32')
 
-        x_test  = np.load("../sita_rotated_data/ATLN_2015_2016_data_x_101_filted.npy").astype('float32')
-        y_test  = np.load("../sita_rotated_data/ATLN_2015_2016_data_y_201.npy").astype('float32')
-        x_test = x_test[y_test<=180,:,:,:]
-        y_test = y_test[y_test<=180]
-        x_train = x_train[:, 18:83, 18:83, :]   # 18:83 = 65
-        x_train = normalize_data(x_train, x_train.shape[3])
-        x_test = x_test[:, 18:83, 18:83, :]   # 18:82 = 64
-        x_test = normalize_data(x_test, x_test.shape[3])
+    #W_l1RE = 5e-4
+    W_l1RE = 0
+    W_l2RE = 1e-4
+    #W_l2RE = 1e-5
+    #x_train = np.load("../data/ATLN_2003_2014_data_x_101.npy").astype('float32')
+    #y_train = np.load("../data/ATLN_2003_2014_data_y_201.npy").astype('float32')
+    #x_test  = np.load("../data/ATLN_2015_2016_data_x_101.npy").astype('float32')
+    #y_test  = np.load("../data/ATLN_2015_2016_data_y_201.npy").astype('float32')
+    
+    x_train = np.load(trainset_xpath).astype('float32')
+    y_train = np.load(trainset_ypath).astype('float32')
+    x_test  = np.load(testset_xpath).astype('float32')
+    y_test  = np.load(testset_ypath).astype('float32')
 
-        print("the shape of train set and test set: ", x_train.shape, x_test.shape)
-        model_name_pre = 'Sel_PostNet-'
-        model = AlexNet(W_l1RE, W_l2RE, x_train.shape[1:])
+    x_test = x_test[y_test<=180,:,:,:]
+    y_test = y_test[y_test<=180]
+    x_train = x_train[:, 18:83, 18:83, :]   # 18:83 = 65
+    x_train = normalize_data(x_train, x_train.shape[3])
+    x_test = x_test[:, 18:83, 18:83, :]   # 18:82 = 64
+    x_test = normalize_data(x_test, x_test.shape[3])
+
+    print("the shape of train set and test set: ", x_train.shape, x_test.shape)
+    model_name_pre = 'Sel_PostNet-'
+    model = AlexNet(W_l1RE, W_l2RE, x_train.shape[1:])
 
         #model.load_weights('./NASA_model/weights-improvement-200-148.05.hdf5')
     if not data_augmentation:
@@ -321,23 +323,18 @@ def evaluation_rotated(test_data, y_test, BATCH_SIZE, Rotated_Max_Sita):
     return y_predict, y_predict_var, dy
 
 
-
-
-def load_data():
-    # TC datas 2003~2014 for training, 2015~2016 for testing
-    x_train = np.load("D:/JWM_ZHOUZH/JiangWenMing/sita_rotated_data/ATLN_2003_2014_data_x_101_filted.npy").astype('float32')
-    y_train = np.load("D:/JWM_ZHOUZH/JiangWenMing/sita_rotated_data/ATLN_2003_2014_data_y_201.npy").astype('float32')
-    x_test  = np.load("D:/JWM_ZHOUZH/JiangWenMing/sita_rotated_data/ATLN_2015_2016_data_x_101_filted.npy").astype('float32')
-    y_test  = np.load("D:/JWM_ZHOUZH/JiangWenMing/sita_rotated_data/ATLN_2015_2016_data_y_201.npy").astype('float32')
-    x_test = x_test[y_test<=180,:,:,:]
-    y_test = y_test[y_test<=180]
-    #x_train = x_train[:, 18:83, 18:83, :]   # 18:83 = 65
-    #x_test = x_test[:, 18:83, 18:83, :]
-    #x_train, x_test = normalize(x_train, x_test)
-    return x_train, y_train, x_test, y_test
-
-
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.parse_args()
 
-    train_AlexNet(300, 0)
-    exit()
+    parser.add_argument("-P", "--datapath", default="../data/TCIR-ATLN_EPAC_WPAC.h5", help="the TCIR dataset file path")
+    parser.add_argument("-Tx", "--trainset_xpath", default="../data/ATLN_2003_2014_data_x_101.npy", help="the trainning set x file path")
+    parser.add_argument("-Ty", "--trainset_ypath", default="../data/ATLN_2003_2014_data_y_101.npy", help="the trainning set y file path")
+
+    parser.add_argument("-Tex", "--testset_xpath", default="../data/ATLN_2015_2016_data_x_101.npy", help="the test set x file path")
+    parser.add_argument("-Tey", "--testset_ypath", default="../data/ATLN_2015_2016_data_y_101.npy", help="the test set y file path")
+
+    parser.add_argument("-E", "--epoch", default=600, help="epochs for trainning")
+    args = parser.parse_args()
+    
+    train_AlexNet(600, args.trainset_xpath, args.trainset_ypath, args.testset_xpath, args.testset_ypath)
