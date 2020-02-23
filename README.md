@@ -57,7 +57,23 @@ cd Selective-regression-model/ApparentAgeEstimation/
 python LAPClassification.py
 ```
 
+###Draw Figures in the Paper
+The steps to rebuild the models and results in the paper is easy but fussy. The source dataset and neural network models need be downloaded, and the softwares TensorFlow and Caffe should be installed. So, we open the results (.npy files and .csv files in the dir ./DrawFigures/), including the following information.
 
+| Blend-Var or MC-dropout | dy (y-f(x)) |  MSE or MAE | the gap t | (MSE or MAE) +t |
+|  ----  | ----  | --- | ----  | ----  | 
+
+If you want to draw the figures in the paper:
+
+```
+cd ./DrawFigures/AGE/
+python draw_all_figures.py
+```
+
+The figures will be save into dir ./DrawFigures/AGE/Figure/.
+
+If you still have some questions, welcome to contact me. 
+My email address : <jwm17@mails.tsinghua.edu.cn>.
 
 [^TCIR]: Boyo Chen, Buo-Fu Chen, and Hsuan-Tien Lin. Rotation-blended CNNs on a new open dataset for tropical cyclone image-to-intensity regression. In Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD), August 2018.
 
