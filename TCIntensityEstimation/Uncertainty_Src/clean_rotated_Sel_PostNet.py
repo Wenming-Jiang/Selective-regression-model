@@ -19,13 +19,32 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import argparse
-from PIL import Image
+
 import sys
 sys.path.append("../tools/")
 
 #regressmodel = AlexNet(W_l1RE=0, W_l2RE=1e-4, shape=(65,65,2))
 #regressmodel.load_weights('../result_model/weightsV2-improvement-450.hdf5')
 #regressmodel.load_weights('./NASA_model/weights-improvement-250-131.65.hdf5')
+
+def uncertainty_loss(y_true, y_pred, alpha=1.0, beta=0.1, k=0.01): 
+    # y_pred.shape y_true.shape
+    print("************************** [JWM] ******************************")
+    print(K.shape(y_true), K.shape(y_pred))
+    loss_regular = K.mean(K.square(y_pred[:,0] - y_true), axis=-1)
+    loss_constrain1 = K.mean(k * (K.exp((y_true - y_pred[:,1])/4) + K.exp((y_pred[:,2] - y_true)/4)), axis=-1)
+    loss_constrain2 = K.mean(K.square(y_pred[:,1] - y_pred[:,2]), axis=-1)
+    loss_total = alpha * loss_regular + loss_constrain1 + beta * loss_constrain2
+    return loss_total
+
+def HoverY(y_true, y_pred):
+    return K.mean((y_pred[:,1] > y_true), axis=-1)
+
+def LlessY(y_true, y_pred):
+    return K.mean((y_true > y_pred[:,2]), axis=-1)
+
+def H_L_range(y_true, y_pred):
+    return K.mean(K.abs(y_pred[:,1] - y_pred[:,2]), axis=-1)
 
 def plot_history(history, fig_name, ignore_num=0, show = False):
     import matplotlib.pyplot as plt
@@ -107,7 +126,7 @@ def AlexNet(W_l1RE, W_l2RE, shape):
         kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
     model.add(Activation('relu'))
 
-    model.add(Dense(1, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+    model.add(Dense(3, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
         kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
     #model.add(Activation('softmax'))
     model.add(Activation('linear'))
@@ -117,8 +136,9 @@ def AlexNet(W_l1RE, W_l2RE, shape):
 
     # Let's train the model using RMSprop
     #model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
-    model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae'])
-    #model.summary()
+    #model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', HoverY, LlessY, H_L_range])
+    model.compile(loss=uncertainty_loss, optimizer=opt, metrics=['mae', HoverY, LlessY, H_L_range])
+    model.summary()
     return model
 
 def normalize_data(x_test, chanel_num):
@@ -186,7 +206,7 @@ def train_AlexNet(EPOCHS, trainset_xpath, trainset_ypath, testset_xpath, testset
     
         reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.6, patience=20, min_lr=1e-6)
         #tb = TensorBoard(log_dir='./tmp/log', histogram_freq=10)
-        filepath="./NASA_model/weights-improvement-{epoch:02d}-{val_loss:.2f}.hdf5"
+        filepath="./result_model/uncertainty_loss-{epoch:02d}-{val_loss:.2f}.hdf5"
         checkpoint= ModelCheckpoint(filepath, monitor='val_loss', verbose=1,  period = 50)
         datagen = ImageDataGenerator(
             featurewise_center=False,  # set input mean to 0 over the dataset
@@ -275,19 +295,14 @@ def evaluation(test_data, y_test, BATCH_SIZE):
     #np.savetxt("dy.csv", dy, delimiter=',')
     return y_class_predict, y_class, dy
 
-def evaluation_rotated(testset_xpath, testset_ypath, BATCH_SIZE=64, Rotated_Max_Sita=45):
+def evaluation_rotated(test_data, y_test, BATCH_SIZE, Rotated_Max_Sita):
     #classmodel = load_model('./NASA_model/AlexNet0-180-0-0.5.h5')
     regressmodel = AlexNet(W_l1RE=0, W_l2RE=1e-4, shape=(65,65,2))
     regressmodel.load_weights('../result_model/weightsV2-improvement-450.hdf5')
 
     #Rotated_Max_Sita = 45
-    test_data = np.load(testset_xpath).astype('float32')
-    y_test    = np.load(testset_ypath).astype('float32')
-    test_data = test_data[y_test<=180,:,:,:]
-    y_test    = y_test[y_test<=180]
-    print(f'test dataset size = {test_data.shape}')
     y_predict = np.zeros((y_test.shape[0], int(360/Rotated_Max_Sita)))
-    
+
     for rotatedsita in  range(0, 360, Rotated_Max_Sita):
         testx = rotate_by_channel(test_data, np.ones(test_data.shape[0])*rotatedsita, 2)
         testx = testx[:, 18:83, 18:83, :]
@@ -304,11 +319,8 @@ def evaluation_rotated(testset_xpath, testset_ypath, BATCH_SIZE=64, Rotated_Max_
     rmse = np.sqrt(np.mean((y_predict_mean-y_test) * (y_predict_mean-y_test)))
     print("Total - rotated blend RMSE: " + str(rmse))
 
-    #dy = y_predict_mean - y_test
-    dy = y_test
-    ylist_mean_var_dy = np.concatenate((y_predict, y_predict_mean[:, np.newaxis], y_predict_var[:, np.newaxis], dy[:, np.newaxis]), axis=-1)
-    np.save(f'./eval_output/ylist{360//Rotated_Max_Sita}_mean1_var1_dy1.npy', ylist_mean_var_dy)
-    return
+    dy = y_predict_mean - y_test
+
     #np.savetxt("y_class_predict.csv", y_class_predict, delimiter=',')
     #np.savetxt("y_class_predict_maxindex.csv", y_class_predict.argmax(axis=-1), delimiter=',')
     #np.savetxt("y_class.csv", y_class, delimiter=',')
@@ -343,10 +355,6 @@ if __name__ == '__main__':
     parser.add_argument("-Tey", "--testset_ypath", default="../Data/ATLN_2015_2016_data_y_101.npy", help="the test set y file path")
 
     parser.add_argument("-E", "--epoch", default=600, help="epochs for trainning")
-    parser.add_argument("--test", action="store_true")
-    parser.add_argument("--sita", default=10, type=int, help="rotated sita for blending")
     args = parser.parse_args()
-    if args.test:
-        evaluation_rotated(args.testset_xpath, args.testset_ypath, BATCH_SIZE=64, Rotated_Max_Sita=args.sita)
-    else:
-        train_AlexNet(300, args.trainset_xpath, args.trainset_ypath, args.testset_xpath, args.testset_ypath)
+    
+    train_AlexNet(300, args.trainset_xpath, args.trainset_ypath, args.testset_xpath, args.testset_ypath)

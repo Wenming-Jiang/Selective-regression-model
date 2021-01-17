@@ -20,12 +20,38 @@ import math
 import matplotlib.pyplot as plt
 import argparse
 from PIL import Image
+
 import sys
 sys.path.append("../tools/")
 
 #regressmodel = AlexNet(W_l1RE=0, W_l2RE=1e-4, shape=(65,65,2))
 #regressmodel.load_weights('../result_model/weightsV2-improvement-450.hdf5')
 #regressmodel.load_weights('./NASA_model/weights-improvement-250-131.65.hdf5')
+
+def uncertainty_loss(y_true, y_pred, alpha=0.5, beta=0.1, k=5.0): 
+    # y_pred.shape y_true.shape
+    print("************************** [JWM] ******************************")
+    print(K.shape(y_true), K.shape(y_pred))
+    #loss_regular = K.mean(K.square(y_pred[:,0] - y_true[:,0])) ##MSE
+    loss_regular = K.mean(K.abs(y_pred[:,0] - y_true[:,0])) ##MAE
+    #return loss_regular
+    #loss_constrain1 = K.mean(k * (K.exp((y_true - y_pred[:,1])/4) + K.exp((y_pred[:,2] - y_true)/4)), axis=-1)
+    loss_constrain1 = K.mean(K.maximum(y_true[:,0] - y_pred[:,1] + 2, 0)**2 + K.maximum(y_pred[:,2] - y_true[:,0] - 2 , 0)**2)
+    loss_constrain2 = K.mean(K.square(y_pred[:,1] - y_pred[:,2]))
+    loss_total = alpha * loss_regular + k * loss_constrain1 + beta * loss_constrain2
+    return loss_total
+
+def HoverY(y_true, y_pred):
+    return K.mean((y_pred[:,1] > y_true[:,0]))
+
+def realRMSE(y_true, y_pred):
+    return K.sqrt(K.mean(K.square(y_pred[:,0] - y_true[:,0])))
+
+def LlessY(y_true, y_pred):
+    return K.mean((y_true[:,0] > y_pred[:,2]))
+
+def H_L_range(y_true, y_pred):
+    return K.mean(K.abs(y_pred[:,1] - y_pred[:,2]))
 
 def plot_history(history, fig_name, ignore_num=0, show = False):
     import matplotlib.pyplot as plt
@@ -75,50 +101,71 @@ def rotate_by_channel(data, sita, length=2):
     return np.array(newdata)
 
 def AlexNet(W_l1RE, W_l2RE, shape):
-    model = Sequential() # 16 32 64 128    256 64 1  
-    model.add(Conv2D(16, (4, 4), strides = 2, padding='valid',
-                     input_shape=shape, 
-                     kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
-                     kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
-    model.add(Activation('relu'))
 
-    #model.add(AveragePooling2D((2, 2), strides = 1))
-    model.add(Conv2D(32, (3, 3), strides = 2, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
-        kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
-    model.add(Activation('relu'))
-    model.add(BatchNormalization(axis=3))
+    input = Input(shape=shape)
+    curr = Conv2D(16, (4, 4), strides=2, padding='valid', 
+                kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(input)
+    curr = Activation('relu')(curr)
+    
+    curr = Conv2D(32, (3, 3), strides = 2,
+                kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr)
+    curr = Activation('relu')(curr)
+    curr = BatchNormalization(axis=3)(curr)
 
-    model.add(Conv2D(64, (3, 3), strides = 2, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
-        kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
-    model.add(Activation('relu'))
+    curr = Conv2D(64, (3, 3), strides = 2,
+                kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr)
+    curr = Activation('relu')(curr)
+    
+    curr = Conv2D(128, (3, 3), strides = 2,
+                kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr)
+    curr = Activation('relu')(curr)
+    curr = BatchNormalization(axis=3)(curr)
 
-    model.add(Conv2D(128, (3, 3) , strides = 2, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01), 
-        kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
-    model.add(Activation('relu'))
-    model.add(BatchNormalization(axis=3))
+    curr = Flatten()(curr)
+    curr = Dense(256, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr)
+    curr = Activation('relu')(curr)
 
-    model.add(Flatten())
-    model.add(Dense(256, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
-        kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
-    model.add(Activation('relu'))
-    model.add(BatchNormalization())
-    #model.add(Dropout(0.5))
-    model.add(Dense(64, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
-        kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
-    model.add(Activation('relu'))
+    # auxiliary output: y^{hat}
+    curr1 = Dense(64, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr)
+    curr1 = Activation('relu')(curr1)
+    curr1 = Dense(1, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr1)
+    curr1 = Activation('linear')(curr1)
+    
+    ## sup limit: H
+    curr2 = Dense(64, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                    kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr)
+    curr2 = Activation('relu')(curr2)
+    curr2 = Dense(1, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                    kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr2)
+    curr2 = Activation('linear')(curr2)
 
-    model.add(Dense(1, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
-        kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE)))
-    #model.add(Activation('softmax'))
-    model.add(Activation('linear'))
+    ## inf limit: L
+    curr3 = Dense(64, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                    kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr)
+    curr3 = Activation('relu')(curr3)
+    curr3 = Dense(1, kernel_initializer=RandomNormal(mean=0.0, stddev=0.01),
+                    kernel_regularizer=l1_l2(l1=W_l1RE, l2=W_l2RE))(curr3)
+    curr3 = Activation('linear')(curr3)
+
+    final_output = Concatenate(axis=1, name="selective_output")([curr1, curr2, curr3])
+
+    model = Model(inputs=input, outputs=final_output)
 
     #opt = keras.optimizers.rmsprop(lr=0.001)
     opt = keras.optimizers.rmsprop(lr=0.005)
 
     # Let's train the model using RMSprop
     #model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
-    model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae'])
-    #model.summary()
+    #model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', HoverY, LlessY, H_L_range])
+    model.compile(loss=uncertainty_loss, optimizer=opt, metrics=[realRMSE, HoverY, LlessY, H_L_range])
+    model.summary()
     return model
 
 def normalize_data(x_test, chanel_num):
@@ -186,7 +233,7 @@ def train_AlexNet(EPOCHS, trainset_xpath, trainset_ypath, testset_xpath, testset
     
         reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.6, patience=20, min_lr=1e-6)
         #tb = TensorBoard(log_dir='./tmp/log', histogram_freq=10)
-        filepath="./NASA_model/weights-improvement-{epoch:02d}-{val_loss:.2f}.hdf5"
+        filepath="./result_model/uncertainty_loss-{epoch:02d}-{val_loss:.2f}.hdf5"
         checkpoint= ModelCheckpoint(filepath, monitor='val_loss', verbose=1,  period = 50)
         datagen = ImageDataGenerator(
             featurewise_center=False,  # set input mean to 0 over the dataset
@@ -236,83 +283,93 @@ def train_AlexNet(EPOCHS, trainset_xpath, trainset_ypath, testset_xpath, testset
     plot_history(history, model_path+"-"+str(int(scores[1]*10)/10.0)+".png", 100) # plot_history(history=history, ignore_num=5)
     print("Over!!!")
 
-def evaluation(test_data, y_test, BATCH_SIZE):
-    classmodel = load_model('./NASA_model/AlexNet0-180-0-0.5.h5')
+
+def HoverY1(y_true, y_pred):
+    return np.mean((y_pred[:,1] > y_true[:,0]))
+
+def realRMSE1(y_true, y_pred):
+    return np.sqrt(np.mean((y_pred[:,0] - y_true[:,0])**2))
+
+def LlessY1(y_true, y_pred):
+    return np.mean((y_true[:,0] > y_pred[:,2]))
+
+def H_L_range1(y_true, y_pred):
+    return np.mean(np.abs(y_pred[:,1] - y_pred[:,2]))
+
+def YinL_H(y_true, y_pred):
+    return ((y_true[:,0]>=y_pred[:,2]) * (y_true[:,0]<=y_pred[:,1])).mean()
+
+def YpinYt2std(y_true, y_pred, std):
+    return ((y_pred[:,0]>=y_true[:,0]-std) * (y_pred[:,0]<=y_true[:,0]+std)).mean()
+
+def Selective_evaluation_rotated(testset_xpath, testset_ypath, modelpath, BATCH_SIZE, Rotated_Max_Sita):
     regressmodel = AlexNet(W_l1RE=0, W_l2RE=1e-4, shape=(65,65,2))
-    regressmodel.load_weights('../result_model/weightsV2-improvement-450.hdf5')
+    #regressmodel.load_weights('../result_model/weightsV2-improvement-450.hdf5')
+    regressmodel.load_weights(modelpath)
 
-    Rotated_Max_Sita = 45
-    y_predict = np.zeros(y_test.shape)
-    y_class_predict = np.zeros((y_test.shape[0], 8))
-
-    for rotatedsita in  range(0, 360, Rotated_Max_Sita):
-        testx = rotate_by_channel(test_data, np.ones(test_data.shape[0])*rotatedsita, 2)
-        testx = testx[:, 18:83, 18:83, :]
-        testx = normalize_data(testx, testx.shape[3])
-
-        y_predict_regress = regressmodel.predict(testx, batch_size=BATCH_SIZE, verbose=0).reshape(-1)
-        print("Test data rotated sita: ", rotatedsita)
-        y_predict = y_predict + y_predict_regress
-        rmse = np.sqrt(np.mean((y_predict_regress-y_test) * (y_predict_regress-y_test)))
-        print(str(rotatedsita/Rotated_Max_Sita+1) + "- rotated blend RMSE: " + str(rmse))
-
-        y_class_predict_tmp = classmodel.predict(testx, batch_size=32, verbose=0)
-        if(len(y_class_predict_tmp.shape)==3):
-            y_class_predict_tmp = y_class_predict_tmp.reshape(-1)
-        y_class_predict = y_class_predict + y_class_predict_tmp
-    
-    y_predict = y_predict / (360/Rotated_Max_Sita)
-    rmse = np.sqrt(np.mean((y_predict-y_test) * (y_predict-y_test)))
-    print("Total - rotated blend RMSE: " + str(rmse))
-
-    y_class_predict = y_class_predict / (360/Rotated_Max_Sita)
-    dy = y_predict - y_test
-    y_class = intensity2class(y_test)
-
-    #np.savetxt("y_class_predict.csv", y_class_predict, delimiter=',')
-    #np.savetxt("y_class_predict_maxindex.csv", y_class_predict.argmax(axis=-1), delimiter=',')
-    #np.savetxt("y_class.csv", y_class, delimiter=',')
-    #np.savetxt("dy.csv", dy, delimiter=',')
-    return y_class_predict, y_class, dy
-
-def evaluation_rotated(testset_xpath, testset_ypath, BATCH_SIZE=64, Rotated_Max_Sita=45):
-    #classmodel = load_model('./NASA_model/AlexNet0-180-0-0.5.h5')
-    regressmodel = AlexNet(W_l1RE=0, W_l2RE=1e-4, shape=(65,65,2))
-    regressmodel.load_weights('../result_model/weightsV2-improvement-450.hdf5')
+    x_test  = np.load(testset_xpath).astype('float32')
+    y_test  = np.load(testset_ypath).astype('float32')
+    x_test = x_test[y_test<=180,:,:,:]
+    y_test = y_test[y_test<=180]
+    y_test = y_test[:, np.newaxis]
 
     #Rotated_Max_Sita = 45
-    test_data = np.load(testset_xpath).astype('float32')
-    y_test    = np.load(testset_ypath).astype('float32')
-    test_data = test_data[y_test<=180,:,:,:]
-    y_test    = y_test[y_test<=180]
-    print(f'test dataset size = {test_data.shape}')
-    y_predict = np.zeros((y_test.shape[0], int(360/Rotated_Max_Sita)))
-    
+    y_predict = np.zeros((int(360/Rotated_Max_Sita), y_test.shape[0], 3))
+
     for rotatedsita in  range(0, 360, Rotated_Max_Sita):
-        testx = rotate_by_channel(test_data, np.ones(test_data.shape[0])*rotatedsita, 2)
-        testx = testx[:, 18:83, 18:83, :]
+        testx = rotate_by_channel(x_test, np.ones(x_test.shape[0])*rotatedsita, 2)
+        testx = testx[:, 18:83, 18:83, :] # 18:82 = 64
         testx = normalize_data(testx, testx.shape[3])
 
-        y_predict_regress = regressmodel.predict(testx, batch_size=BATCH_SIZE, verbose=0).reshape(-1)
-        print("Test data rotated sita: ", rotatedsita)
-        y_predict[:, int(rotatedsita/Rotated_Max_Sita)] = y_predict_regress
-        rmse = np.sqrt(np.mean((y_predict_regress-y_test) * (y_predict_regress-y_test)))
-        print(str(rotatedsita/Rotated_Max_Sita+1) + "- rotated blend RMSE: " + str(rmse))
+        y_predict_regress = regressmodel.predict(testx, batch_size=BATCH_SIZE, verbose=0) # [y, H, L]
+        thisrmse = realRMSE1(y_test, y_predict_regress)
+        #print(y_predict_regress.shape)
+        print(f'------------- Test data rotated sita: {rotatedsita} -----------------------')
+        print(f'/*** 2*realRMSE : {2*thisrmse*1000//1/1000} ****')
+        print(f'/****  MAE(H-L) : {H_L_range1(y_test, y_predict_regress)*1000//1/1000} ****')
+        print(f'/****   H > Y   : {HoverY1(y_test, y_predict_regress)*1000//1/10}% ****')
+        print(f'/****   L < Y   : {LlessY1(y_test, y_predict_regress)*1000//1/10}% ****')
+        print(f'/** Y_t in 2*STD: {YpinYt2std(y_test, y_predict_regress[:,[0]], thisrmse)*1000//1/10}% ****')
+        print(f'/** Y_t in [L, H]: {YinL_H(y_test, y_predict_regress)*1000//1/10}% ****')
+        print(f'/** Y_p in [L, H]: {YinL_H(y_predict_regress[:,[0]], y_predict_regress)*1000//1/10}% ****')
+        print(f'---------------------------------------------------------------------------')
+        #y_predict[:, int(rotatedsita/Rotated_Max_Sita)] = y_predict_regress[:,0]
+        y_predict[int(rotatedsita/Rotated_Max_Sita), :, :] = y_predict_regress
 
-    y_predict_mean = np.mean(y_predict, axis = -1)
-    y_predict_var = np.var(y_predict, axis =-1)
-    rmse = np.sqrt(np.mean((y_predict_mean-y_test) * (y_predict_mean-y_test)))
-    print("Total - rotated blend RMSE: " + str(rmse))
+    y_predict_mean = np.mean(y_predict, axis = 0)
+    #print(y_predict_mean.shape)
+    y_predict_var = np.var(y_predict, axis = 0)
 
-    #dy = y_predict_mean - y_test
-    dy = y_test
-    ylist_mean_var_dy = np.concatenate((y_predict, y_predict_mean[:, np.newaxis], y_predict_var[:, np.newaxis], dy[:, np.newaxis]), axis=-1)
-    np.save(f'./eval_output/ylist{360//Rotated_Max_Sita}_mean1_var1_dy1.npy', ylist_mean_var_dy)
-    return
-    #np.savetxt("y_class_predict.csv", y_class_predict, delimiter=',')
-    #np.savetxt("y_class_predict_maxindex.csv", y_class_predict.argmax(axis=-1), delimiter=',')
-    #np.savetxt("y_class.csv", y_class, delimiter=',')
-    #np.savetxt("dy.csv", dy, delimiter=',')
+    rmse = np.sqrt(np.mean((y_predict_mean[:,0]-y_test[:,0])**2))
+    print(f'------------- Total rotated number:{int(360/Rotated_Max_Sita)}, Summary as fellow -------------------')
+    print(f'Total - rotated blend RMSE: {rmse*1000//1/1000}')
+    print(f'Use Selective: y in range[{2*rmse*1000//1/1000}]')
+    print(f'Use MaxMin   : y in range[{H_L_range1(y_test, y_predict_mean)*1000//1/1000}]')
+    print(f'--  MAE(H-L) : {H_L_range1(y_test, y_predict_mean)*1000//1/1000}  ------')
+    print(f'--   H > Y   : {HoverY1(y_test, y_predict_mean)*1000//1/10}%  ------')
+    print(f'--   L < Y   : {LlessY1(y_test, y_predict_mean)*1000//1/10}%  ------')
+    print(f'- Y_t in 2*STD: {YpinYt2std(y_test, y_predict_mean[:,[0]], rmse)*1000//1/10}%  ------')
+    print(f'- Y_t in [L, H]: {YinL_H(y_test, y_predict_mean)*1000//1/10}%  ------')
+    print(f'- Y_p in [L, H]: {YinL_H(y_predict_mean[:,[0]], y_predict_mean)*1000//1/10}%  ------')
+
+    sorted_index = np.argsort(y_test[:,0])
+    y_test = y_test[sorted_index, :]
+    y_predict_mean = y_predict_mean[sorted_index, :]
+    num = np.arange(y_test.shape[0])
+    plt.figure(figsize=(30, 8), dpi=300)
+    plt.plot(num, y_test, 'bo', label='y_true')
+    plt.plot(num, y_predict_mean[:,0], 'g^', label='y_pred')
+    plt.plot(num, y_predict_mean[:,1], 'r*', label='High')
+    plt.plot(num, y_predict_mean[:,2], 'y*', label='Low')
+    plt.show()
+    import time
+    modelname = modelpath.split("/")[-1]
+    figurename = f'./Output/{modelname}_{time.strftime("%Y-%m-%d_%H-%M", time.localtime())}.png'
+    print(f'The y,H,L vs number figure Saved as: {figurename}')
+    plt.savefig(figurename, format='png', bbox_inches = 'tight')
+    
+    return 0
+    dy = y_predict_mean - y_test
     sorted_index = np.argsort(y_predict_var)
     total_num = len(sorted_index)
     #sorted_x_data = test_data[sorted_index,:,:,:]
@@ -343,10 +400,14 @@ if __name__ == '__main__':
     parser.add_argument("-Tey", "--testset_ypath", default="../Data/ATLN_2015_2016_data_y_101.npy", help="the test set y file path")
 
     parser.add_argument("-E", "--epoch", default=600, help="epochs for trainning")
-    parser.add_argument("--test", action="store_true")
-    parser.add_argument("--sita", default=10, type=int, help="rotated sita for blending")
+    parser.add_argument("--trainEnable", default=False, help="train or not. If 'True'->train, 'False'->test")
+    parser.add_argument("--modelPath", default="./result_model/uncertainty_loss-300-242.16.hdf5", help="train ready model path")
     args = parser.parse_args()
-    if args.test:
-        evaluation_rotated(args.testset_xpath, args.testset_ypath, BATCH_SIZE=64, Rotated_Max_Sita=args.sita)
+    
+    if not args.trainEnable:
+        if args.modelPath == "":
+            print("You must provide 'the model path', because 'trainEnable==Flase'")
+            exit()
+        Selective_evaluation_rotated(args.testset_xpath, args.testset_ypath, args.modelPath, BATCH_SIZE=64, Rotated_Max_Sita=45)
     else:
         train_AlexNet(300, args.trainset_xpath, args.trainset_ypath, args.testset_xpath, args.testset_ypath)
